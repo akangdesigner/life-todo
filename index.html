@@ -89,6 +89,7 @@ async function call(action, extra = {}) {
   const data = await res.json();
   if (!data.ok) throw new Error(data.error || 'error');
   todos = data.todos;
+  try { localStorage.setItem('todos', JSON.stringify(todos)); } catch {}
   render();
 }
 
@@ -163,6 +164,9 @@ async function loadWeather() {
   } catch { $('wx').textContent = '天氣載入失敗'; }
 }
 loadWeather();
+
+// 先秀上次的清單，不用等 LINE 登入跟伺服器
+try { const c = JSON.parse(localStorage.getItem('todos')); if (Array.isArray(c)) { todos = c; render(); } } catch {}
 
 liff.init({ liffId: LIFF_ID }).then(() => {
   if (!liff.isLoggedIn()) return liff.login();
