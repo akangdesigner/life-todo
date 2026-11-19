@@ -39,11 +39,19 @@
   .txt { flex: 1; word-break: break-word; }
   .tag { font-size: 12px; color: var(--muted); }
   .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .wx { background: #2f80ed; color: #fff; border-radius: 16px; padding: 16px; margin-bottom: 22px; font-size: 14px; }
+  .wx b { font-size: 32px; line-height: 1.1; }
+  .wx .row { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }
+  .wx .hours { display: flex; gap: 6px; overflow-x: auto; margin-top: 12px; padding-bottom: 2px; }
+  .wx .h { flex: none; text-align: center; background: rgba(255,255,255,.15); border-radius: 10px; padding: 6px 8px; font-size: 12px; }
+  .wx .tip { margin-top: 8px; }
   .msg { text-align: center; color: var(--muted); padding: 40px 0; }
 </style>
 </head>
 <body>
 <main>
+  <section class="wx" id="wx">萬華天氣載入中…</section>
+
   <h1>下班待辦</h1>
   <p class="sub">18:00 會在 LINE 提醒你還沒做的事</p>
 
@@ -115,6 +123,28 @@ $('f').onsubmit = (e) => {
   const v = $('t').value; $('t').value = '';
   add(v);
 };
+
+async function loadWeather() {
+  try {
+    const u = 'https://api.open-meteo.com/v1/forecast?latitude=25.03&longitude=121.50&current=temperature_2m,apparent_temperature&hourly=temperature_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTaipei&forecast_days=2';
+    const d = await (await fetch(u)).json();
+    const lo = Math.round(d.daily.temperature_2m_min[0]), hi = Math.round(d.daily.temperature_2m_max[0]);
+    const rain = d.daily.precipitation_probability_max[0];
+    const nowH = new Date().getHours();
+    const start = d.hourly.time.findIndex(t => +t.slice(11, 13) === nowH && t.slice(0, 10) === d.current.time.slice(0, 10));
+    let hours = '';
+    for (let i = Math.max(start, 0); i < Math.max(start, 0) + 12 && i < d.hourly.time.length; i++) {
+      hours += `<div class="h">${d.hourly.time[i].slice(11, 13)}時<br>${Math.round(d.hourly.temperature_2m[i])}°<br>💧${d.hourly.precipitation_probability[i]}%</div>`;
+    }
+    const tips = [];
+    if (lo <= 14) tips.push('🧥 很冷，穿厚外套'); else if (lo <= 18) tips.push('🧥 偏涼，帶件外套');
+    if (rain >= 50) tips.push('☔ 會下雨，帶傘');
+    $('wx').innerHTML = `<div class="row"><div>萬華現在<br><b>${d.current.temperature_2m}°C</b></div>
+      <div style="text-align:right">體感 ${d.current.apparent_temperature}°C<br>${lo}～${hi}°C｜降雨 ${rain}%</div></div>
+      ${tips.length ? `<div class="tip">${tips.join('　')}</div>` : ''}<div class="hours">${hours}</div>`;
+  } catch { $('wx').textContent = '天氣載入失敗'; }
+}
+loadWeather();
 
 liff.init({ liffId: LIFF_ID }).then(() => {
   if (!liff.isLoggedIn()) return liff.login();
