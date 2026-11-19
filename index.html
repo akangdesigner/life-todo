@@ -133,6 +133,7 @@ function alertMsg() { $('msg').textContent = '連線失敗，關掉再開一次�
 async function add(text, due = '') {
   text = text.trim();
   if (!text) return;
+  if (!todos.some(t => t.text === text)) { todos = [...todos, { id: 'tmp', text, ...(due ? { due } : {}) }]; render(); }
   try { await call('add', { text, due }); } catch { alertMsg(); }
 }
 
