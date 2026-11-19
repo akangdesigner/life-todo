@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>下班待辦</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root {
+    --bg: #f5f3ef; --card: #ffffff; --ink: #1f1d1a; --muted: #8a857c;
+    --line: #e7e3dc; --accent: #06c755; --accent-ink: #ffffff; --chip: #ece8e1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15140f; --card: #1f1e19; --ink: #f2efe8; --muted: #9a958b;
+      --line: #2d2b25; --chip: #2a2822; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
+  main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; font: inherit; padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); outline: none; }
+  input:focus { border-color: var(--accent); }
+  button.add { font: inherit; font-weight: 600; padding: 0 18px; border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--accent-ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 22px; }
+  .chip { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 0;
+    background: var(--chip); color: var(--ink); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  li { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px;
+    background: var(--card); border: 1px solid var(--line); transition: opacity .25s, transform .25s; }
+  li.out { opacity: 0; transform: translateX(24px); }
+  .box { width: 26px; height: 26px; flex: none; border-radius: 8px; border: 2px solid var(--muted);
+    background: none; padding: 0; display: grid; place-items: center; color: var(--accent-ink); }
+  li.out .box { background: var(--accent); border-color: var(--accent); }
+  .txt { flex: 1; word-break: break-word; }
+  .tag { font-size: 12px; color: var(--muted); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .msg { text-align: center; color: var(--muted); padding: 40px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>下班待辦</h1>
+  <p class="sub">18:00 會在 LINE 提醒你還沒做的事</p>
+
+  <form id="f">
+    <input id="t" placeholder="例如：買垃圾袋" maxlength="60" autocomplete="off" enterkeyhint="done">
+    <button class="add" type="submit">新增</button>
+  </form>
+  <div class="chips" id="chips"></div>
+
+  <ul id="list"></ul>
+  <p class="msg" id="msg">載入中…</p>
+</main>
+
+<script>
+const LIFF_ID = 'REPLACE_LIFF_ID';
+const API = 'https://n8n.aiqkangber.com/webhook/life-todo';
+const QUICK = ['垃圾袋', '蝦皮取貨', '衛生紙', '洗衣精'];
+
+const $ = (id) => document.getElementById(id);
+let todos = [];
+
+async function call(action, extra = {}) {
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, idToken: liff.getIDToken(), ...extra }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'error');
+  todos = data.todos;
+  render();
+}
+
+function render() {
+  $('msg').textContent = '';
+  $('list').innerHTML = '';
+  if (!todos.length) { $('msg').textContent = '沒有待辦，今天可以直接回家 🎉'; }
+  for (const t of todos) {
+    const li = document.createElement('li');
+    li.innerHTML = `<button class="box" aria-label="完成">✓</button>
+      <span class="txt"></span>${t.source === 'shopee' ? '<span class="tag">蝦皮</span>' : ''}`;
+    li.querySelector('.txt').textContent = t.text;
+    li.querySelector('.box').onclick = async () => {
+      li.classList.add('out');
+      try { await call('done', { id: t.id }); } catch { li.classList.remove('out'); alertMsg(); }
+    };
+    $('list').appendChild(li);
+  }
+  $('chips').innerHTML = '';
+  for (const q of QUICK) {
+    if (todos.some(t => t.text === q)) continue;
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = '＋' + q;
+    b.onclick = () => add(q);
+    $('chips').appendChild(b);
+  }
+}
+
+function alertMsg() { $('msg').textContent = '連線失敗，關掉再開一次試試'; }
+
+async function add(text) {
+  text = text.trim();
+  if (!text) return;
+  try { await call('add', { text }); } catch { alertMsg(); }
+}
+
+$('f').onsubmit = (e) => {
+  e.preventDefault();
+  const v = $('t').value; $('t').value = '';
+  add(v);
+};
+
+liff.init({ liffId: LIFF_ID }).then(() => {
+  if (!liff.isLoggedIn()) return liff.login();
+  return call('list');
+}).catch(() => alertMsg());
+</script>
+</body>
+</html>
