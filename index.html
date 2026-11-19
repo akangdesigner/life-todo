@@ -38,6 +38,12 @@
   li.out .box { background: var(--accent); border-color: var(--accent); }
   .txt { flex: 1; word-break: break-word; }
   .tag { font-size: 12px; color: var(--muted); }
+  .due { font-size: 12px; font-weight: 600; color: #e37400; white-space: nowrap; }
+  .due.late { color: #d93025; }
+  .due.far { color: var(--muted); font-weight: 400; }
+  .dueRow { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; color: var(--muted); }
+  .dueRow input { flex: none; padding: 6px 10px; font-size: 14px; }
+  .dueRow button { font: inherit; font-size: 13px; border: 0; background: none; color: var(--muted); text-decoration: underline; padding: 0; }
   .empty { text-align: center; color: var(--muted); padding: 40px 0; }
   .wx { background: #2f80ed; color: #fff; border-radius: 16px; padding: 16px; margin-bottom: 22px; font-size: 14px; }
   .wx b { font-size: 32px; line-height: 1.1; }
@@ -53,12 +59,13 @@
   <section class="wx" id="wx">萬華天氣載入中…</section>
 
   <h1>下班待辦</h1>
-  <p class="sub">18:00 會在 LINE 提醒你還沒做的事</p>
+  <p class="sub">18:00 提醒還沒做的事．有期限的到前 3 天才提醒</p>
 
   <form id="f">
     <input id="t" placeholder="例如：買垃圾袋" maxlength="60" autocomplete="off" enterkeyhint="done">
     <button class="add" type="submit">新增</button>
   </form>
+  <div class="dueRow">期限（可不填）<input type="date" id="d"><button type="button" id="dc">清除</button></div>
   <div class="chips" id="chips"></div>
 
   <ul id="list"></ul>
@@ -89,10 +96,13 @@ function render() {
   $('msg').textContent = '';
   $('list').innerHTML = '';
   if (!todos.length) { $('msg').textContent = '沒有待辦，今天可以直接回家 🎉'; }
-  for (const t of todos) {
+  const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const left = (t) => Math.round((Date.parse(t.due) - Date.parse(today)) / 86400e3);
+  const sorted = [...todos].sort((a, b) => (a.due ? left(a) : 99) - (b.due ? left(b) : 99));
+  for (const t of sorted) {
     const li = document.createElement('li');
     li.innerHTML = `<button class="box" aria-label="完成">✓</button>
-      <span class="txt"></span>${t.source === 'shopee' ? '<span class="tag">蝦皮</span>' : ''}`;
+      <span class="txt"></span>${t.due ? dueHtml(left(t), t.due) : ''}${t.source === 'shopee' ? '<span class="tag">蝦皮</span>' : ''}`;
     li.querySelector('.txt').textContent = t.text;
     li.querySelector('.box').onclick = async () => {
       li.classList.add('out');
@@ -110,18 +120,26 @@ function render() {
   }
 }
 
-function alertMsg() { $('msg').textContent = '連線失敗，關掉再開一次試試'; }
-
-async function add(text) {
-  text = text.trim();
-  if (!text) return;
-  try { await call('add', { text }); } catch { alertMsg(); }
+function dueHtml(n, due) {
+  const md = +due.slice(5, 7) + '/' + +due.slice(8, 10);
+  const cls = n <= 0 ? 'due late' : n <= 3 ? 'due' : 'due far';
+  const txt = n < 0 ? `逾期${-n}天` : n === 0 ? '今天截止' : `${md}前・剩${n}天`;
+  return `<span class="${cls}">${txt}</span>`;
 }
 
+function alertMsg() { $('msg').textContent = '連線失敗，關掉再開一次試試'; }
+
+async function add(text, due = '') {
+  text = text.trim();
+  if (!text) return;
+  try { await call('add', { text, due }); } catch { alertMsg(); }
+}
+
+$('dc').onclick = () => { $('d').value = ''; };
 $('f').onsubmit = (e) => {
   e.preventDefault();
-  const v = $('t').value; $('t').value = '';
-  add(v);
+  const v = $('t').value, d = $('d').value; $('t').value = ''; $('d').value = '';
+  add(v, d);
 };
 
 async function loadWeather() {
